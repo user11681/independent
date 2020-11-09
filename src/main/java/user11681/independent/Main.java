@@ -4,7 +4,9 @@ import java.io.File;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -14,6 +16,9 @@ public class Main {
     private static final int SUCCESS = 0;
     private static final int VALID = 1;
     private static final int INVALID = 2;
+
+    private static final String jarPath = Main.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+    private static final boolean isJar = jarPath.endsWith(".jar");
 
     private static boolean recursive;
 
@@ -95,12 +100,14 @@ public class Main {
         int modificationCount = 0;
 
         for (final File subfile : file.listFiles()) {
-            if (recursive && subfile.isDirectory()) {
-                modificationCount += processDirectory(subfile);
-            }
-
-            if (removeDependencies(subfile.toPath()) == SUCCESS) {
-                ++modificationCount;
+            if (!isJar || !file.getAbsolutePath().equals(jarPath)) {
+                if (recursive && subfile.isDirectory()) {
+                    modificationCount += processDirectory(subfile);
+                } else {
+                    if (removeDependencies(subfile.toPath()) == SUCCESS) {
+                        ++modificationCount;
+                    }
+                }
             }
         }
 
@@ -110,11 +117,14 @@ public class Main {
     private static int removeDependencies(Path modPath) throws Throwable {
         modPath = modPath.toRealPath();
 
-        if (modPath.toString().endsWith(".jar")) {
+        final String path = modPath.toString();
+
+        if (path.endsWith(".jar")) {
             final FileSystem mod = FileSystems.newFileSystem(modPath, Main.class.getClassLoader());
 
             try {
                 final Path metadata = mod.getPath("fabric.mod.json");
+
                 String content = new String(Files.readAllBytes(metadata));
                 int dependsIndex = content.indexOf("\"depends\"");
 
@@ -134,7 +144,7 @@ public class Main {
 
                     content = content.substring(0, dependsIndex) + content.substring(dependsEnd + 1);
 
-                    Files.write(metadata, content.getBytes());
+                    Files.write(metadata, content.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 
                     mod.close();
 
@@ -142,8 +152,12 @@ public class Main {
                 }
 
                 return VALID;
-            } catch (final Throwable throwable) {
+            } catch (final InvalidPathException exception) {
                 return INVALID;
+            } catch (final Throwable throwable) {
+                System.err.printf("An error occurred while attempting to access mod %s.\n", mod);
+
+                throwable.printStackTrace();
             }
         }
 

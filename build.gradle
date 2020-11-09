@@ -3,7 +3,7 @@ plugins {
 }
 
 project.group = "user11681"
-project.version = "1.0.0"
+project.version = "1.0.1"
 
 targetCompatibility = 8
 sourceCompatibility = 8
