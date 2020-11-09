@@ -17,8 +17,9 @@ public class Main {
     private static final int VALID = 1;
     private static final int INVALID = 2;
 
-    private static final String jarPath = Main.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-    private static final boolean isJar = jarPath.endsWith(".jar");
+    private static final String jarPath;
+
+    private static final boolean isJar;
 
     private static boolean recursive;
 
@@ -44,7 +45,7 @@ public class Main {
         if (arguments.size() == 0) {
             final String path = System.getProperty("user.dir");
 
-            System.out.printf("Using the current directory (%s) because arguments were not given.\n", path);
+            System.out.printf("Defaulting to the current directory (%s) because arguments were not given.\n", path);
 
             arguments.add(path);
         }
@@ -100,7 +101,7 @@ public class Main {
         int modificationCount = 0;
 
         for (final File subfile : file.listFiles()) {
-            if (!isJar || !file.getAbsolutePath().equals(jarPath)) {
+            if (!isJar || !subfile.getName().equals(jarPath)) {
                 if (recursive && subfile.isDirectory()) {
                     modificationCount += processDirectory(subfile);
                 } else {
@@ -117,14 +118,11 @@ public class Main {
     private static int removeDependencies(Path modPath) throws Throwable {
         modPath = modPath.toRealPath();
 
-        final String path = modPath.toString();
-
-        if (path.endsWith(".jar")) {
+        if (modPath.toString().endsWith(".jar")) {
             final FileSystem mod = FileSystems.newFileSystem(modPath, Main.class.getClassLoader());
 
             try {
                 final Path metadata = mod.getPath("fabric.mod.json");
-
                 String content = new String(Files.readAllBytes(metadata));
                 int dependsIndex = content.indexOf("\"depends\"");
 
@@ -142,9 +140,7 @@ public class Main {
                         }
                     }
 
-                    content = content.substring(0, dependsIndex) + content.substring(dependsEnd + 1);
-
-                    Files.write(metadata, content.getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+                    Files.write(metadata, (content.substring(0, dependsIndex) + content.substring(dependsEnd + 1)).getBytes(), StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
 
                     mod.close();
 
@@ -162,5 +158,12 @@ public class Main {
         }
 
         return INVALID;
+    }
+
+    static {
+        final String path = Main.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+
+        jarPath = path.substring(path.lastIndexOf('/') + 1);
+        isJar = jarPath.endsWith(".jar");
     }
 }
