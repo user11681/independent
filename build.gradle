@@ -1,0 +1,28 @@
+plugins {
+    id("java")
+    id("maven")
+}
+
+project.group = "user11681"
+project.version = "0.0.0"
+
+targetCompatibility = 8
+sourceCompatibility = 8
+
+jar {
+    manifest {
+        attributes(
+                "Main-Class": "user11681.independent.Main"
+        )
+    }
+}
+
+task sourceJar(type: Jar, dependsOn: classes) {
+    archiveClassifier.set("sources")
+
+    from(sourceSets.main.allSource)
+}
+
+artifacts {
+    archives sourceJar
+}
