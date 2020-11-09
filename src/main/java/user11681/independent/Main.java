@@ -6,9 +6,9 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Scanner;
 
 public class Main {
     private static final int SUCCESS = 0;
@@ -17,15 +17,18 @@ public class Main {
 
     private static boolean recursive;
 
-    public static void main(String[] arguments) throws Throwable {
+    public static void main(String[] argumentArray) throws Throwable {
+        final List<String> arguments = new ArrayList<>(Arrays.asList(argumentArray));
         final List<String> switches = new ArrayList<>();
         final List<String> options = new ArrayList<>();
 
-        for (final String argument : arguments) {
+        for (final String argument : argumentArray) {
             if (argument.matches("--[^-]{2,}")) {
                 options.add(argument.toLowerCase(Locale.ROOT));
+                arguments.remove(argument);
             } else if (argument.matches("-[^-]+")) {
                 switches.add(argument.toLowerCase(Locale.ROOT));
+                arguments.remove(argument);
             }
         }
 
@@ -33,21 +36,23 @@ public class Main {
             recursive = true;
         }
 
-        if (arguments.length == 0) {
-            System.out.println("Enter the path of a mod JAR or directory without escaping any whitespace characters.");
+        if (arguments.size() == 0) {
+            final String path = System.getProperty("user.dir");
 
-            arguments = new String[]{new Scanner(System.in).nextLine()};
+            System.out.printf("Using the current directory (%s) because arguments were not given.\n", path);
+
+            arguments.add(path);
         }
 
         int modificationCount = 0;
 
-        for (final String path : arguments) {
-            final File file = new File(path);
+        for (final String argument : arguments) {
+            final File path = new File(argument);
 
-            if (file.exists()) {
-                modificationCount += processFile(file);
+            if (path.exists()) {
+                modificationCount += processPath(path);
             } else {
-                System.err.printf("\"%s\" is not a valid path.\n", file);
+                System.err.printf("\"%s\" is not a valid path.\n", path);
             }
         }
 
@@ -67,22 +72,13 @@ public class Main {
         }
     }
 
-    @SuppressWarnings("ConstantConditions")
-    private static int processFile(final File file) throws Throwable {
+    private static int processPath(final File file) throws Throwable {
         int modificationCount = 0;
 
         if (file.isDirectory()) {
-            for (final File subfile : file.listFiles()) {
-                if (recursive) {
-                    modificationCount += processFile(subfile);
-                }
-
-                if (removeDependencies(subfile) == SUCCESS) {
-                    ++modificationCount;
-                }
-            }
+            modificationCount += processDirectory(file);
         } else {
-            final int status = removeDependencies(file);
+            final int status = removeDependencies(file.toPath());
 
             if (status == INVALID) {
                 System.err.printf("\"%s\" is not a Fabric mod JAR or directory.\n", file);
@@ -94,9 +90,28 @@ public class Main {
         return modificationCount;
     }
 
-    private static int removeDependencies(final File file) throws Throwable {
-        if (file.getName().endsWith(".jar")) {
-            final FileSystem mod = FileSystems.newFileSystem(file.toPath(), Main.class.getClassLoader());
+    @SuppressWarnings("ConstantConditions")
+    private static int processDirectory(final File file) throws Throwable {
+        int modificationCount = 0;
+
+        for (final File subfile : file.listFiles()) {
+            if (recursive && subfile.isDirectory()) {
+                modificationCount += processDirectory(subfile);
+            }
+
+            if (removeDependencies(subfile.toPath()) == SUCCESS) {
+                ++modificationCount;
+            }
+        }
+
+        return modificationCount;
+    }
+
+    private static int removeDependencies(Path modPath) throws Throwable {
+        modPath = modPath.toRealPath();
+
+        if (modPath.toString().endsWith(".jar")) {
+            final FileSystem mod = FileSystems.newFileSystem(modPath, Main.class.getClassLoader());
 
             try {
                 final Path metadata = mod.getPath("fabric.mod.json");
